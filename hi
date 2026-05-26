@@ -1,0 +1,1407 @@
+local Axiom = shared.Axiom
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Lighting = game:GetService("Lighting")
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+local Camera = workspace.CurrentCamera
+
+local Target = nil
+local TargetPart = nil
+local isMouseDown = false
+local speedEnabled = false
+
+-- Cam Lock state
+local camLockEnabled  = false
+local camLockTarget   = nil  -- the locked Player object
+local camLockPart     = nil  -- the BasePart we aim at
+
+local CLFovCircle = Drawing.new("Circle")
+CLFovCircle.Thickness = 1
+CLFovCircle.NumSides  = 64
+CLFovCircle.Filled    = false
+CLFovCircle.Visible   = false
+
+local FOVCircle = Drawing.new("Circle")
+FOVCircle.Thickness = 1
+FOVCircle.NumSides = 64
+FOVCircle.Filled = false
+FOVCircle.Transparency = 0.6
+FOVCircle.Color = Color3.fromRGB(255, 255, 255)
+
+
+local function IsVisible(Part, Character)
+    local RaycastParams = RaycastParams.new()
+    RaycastParams.FilterType = Enum.RaycastFilterType.Exclude
+    RaycastParams.FilterDescendantsInstances = {LocalPlayer.Character, Camera}
+    local Result = workspace:Raycast(Camera.CFrame.Position, (Part.Position - Camera.CFrame.Position).Unit * 1000, RaycastParams)
+    if Result and Result.Instance then
+        return Result.Instance:IsDescendantOf(Character)
+    end
+    return false
+end
+
+local function clIsKnocked(char)
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        local s = hum:GetState()
+        if s == Enum.HumanoidStateType.Dead or s == Enum.HumanoidStateType.Physics or s == Enum.HumanoidStateType.Ragdoll then return true end
+        if hum.Health > 0 and hum.Health <= 2 then return true end
+    end
+    local be = char:FindFirstChild("BodyEffects")
+    if be then
+        local k = be:FindFirstChild("K.O")
+        if k and k.Value then return true end
+    end
+    return false
+end
+
+local function GetClosestPart(Character)
+    local ClosestPart = nil
+    local ShortestDistance = math.huge
+    local MousePos = UserInputService:GetMouseLocation()
+    for _, Part in pairs(Character:GetChildren()) do
+        if Part:IsA("BasePart") then
+            local Pos, OnScreen = Camera:WorldToViewportPoint(Part.Position)
+            if OnScreen then
+                local Distance = (Vector2.new(Pos.X, Pos.Y) - MousePos).Magnitude
+                if Distance < ShortestDistance then
+                    ShortestDistance = Distance
+                    ClosestPart = Part
+                end
+            end
+        end
+    end
+    return ClosestPart
+end
+
+local function GetClosestPlayer()
+    local Config = Axiom['Silent Aim']
+    local Closest = nil
+    local ShortestDistance = Config['FOV']['Enabled'] and Config['FOV']['Radius'] or math.huge
+    for _, Player in pairs(Players:GetPlayers()) do
+        if Player ~= LocalPlayer and Player.Character then
+            local Part = Player.Character:FindFirstChild("HumanoidRootPart")
+            if Part then
+                if Axiom['General']['Checks']['Visible'] and not IsVisible(Part, Player.Character) then continue end
+                local Pos, OnScreen = Camera:WorldToViewportPoint(Part.Position)
+                if OnScreen then
+                    local MouseDist = (Vector2.new(Pos.X, Pos.Y) - UserInputService:GetMouseLocation()).Magnitude
+                    if MouseDist < ShortestDistance then
+                        Closest = Player
+                        ShortestDistance = MouseDist
+                    end
+                end
+            end
+        end
+    end
+    return Closest
+end
+
+-- All body parts for 'Closest Part' mode
+local AllHitParts = {
+    'Head', 'UpperTorso', 'LowerTorso', 'HumanoidRootPart',
+    'LeftUpperArm', 'RightUpperArm', 'LeftLowerArm', 'RightLowerArm',
+    'LeftHand', 'RightHand',
+    'LeftUpperLeg', 'RightUpperLeg', 'LeftLowerLeg', 'RightLowerLeg',
+    'LeftFoot', 'RightFoot',
+}
+
+local function GetClosestBodyPart(character)
+    local mp = UserInputService:GetMouseLocation()
+    local best, bd = nil, math.huge
+    for _, name in ipairs(AllHitParts) do
+        local part = character:FindFirstChild(name)
+        if part and part:IsA("BasePart") then
+            local sp, on = Camera:WorldToViewportPoint(part.Position)
+            if on then
+                local d = (Vector2.new(sp.X, sp.Y) - mp).Magnitude
+                if d < bd then bd = d; best = part end
+            end
+        end
+    end
+    return best
+end
+
+local function GetCamLockAimPart(character)
+    local CL = Axiom['Cam Lock']
+    local hitPart = CL['Hit Part']
+    if hitPart == 'Closest Part' then
+        return GetClosestBodyPart(character)
+    end
+    return character:FindFirstChild(hitPart)
+        or character:FindFirstChild('HumanoidRootPart')
+end
+
+local function GetClosestPlayerForCamLock()
+    local CL  = Axiom['Cam Lock']
+    local fov = CL['FOV']
+    local mp  = UserInputService:GetMouseLocation()
+    local limit = (fov['Enabled'] and fov['Radius']) or math.huge
+    local best, bd = nil, math.huge
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player == LocalPlayer then continue end
+        local char = player.Character
+        if not char then continue end
+        if clIsKnocked(char) then continue end
+        local hum = char:FindFirstChildOfClass('Humanoid')
+        if not hum or hum.Health <= 0 then continue end
+        local hrp = char:FindFirstChild('HumanoidRootPart')
+        if not hrp then continue end
+        local sp, on = Camera:WorldToViewportPoint(hrp.Position)
+        if on and sp.Z > 0 then
+            local d = (Vector2.new(sp.X, sp.Y) - mp).Magnitude
+            if d <= limit and d < bd then
+                bd = d; best = player
+            end
+        end
+    end
+    return best
+end
+
+local espGui = Instance.new("ScreenGui")
+espGui.Name = "VanityESP"
+espGui.ResetOnSpawn = false
+espGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+espGui.IgnoreGuiInset = true
+pcall(function() espGui.Parent = game:GetService("CoreGui") end)
+if not espGui.Parent then espGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
+
+local espLabels = {}
+
+local function makeTag()
+    local lbl = Instance.new("TextLabel", espGui)
+    lbl.BackgroundTransparency = 1
+    lbl.AnchorPoint = Vector2.new(0.5, 1)
+    lbl.Size = UDim2.new(0, 200, 0, 18)
+    lbl.Font = Axiom['ESP']['Font']
+    lbl.TextSize = Axiom['ESP']['Size']
+    lbl.TextColor3 = Axiom['ESP']['Color']
+    lbl.TextStrokeTransparency = 0
+    lbl.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    lbl.Text = ""
+    lbl.Visible = false
+    lbl.ZIndex = 10
+    return lbl
+end
+
+local function addESP(player)
+    if player == LocalPlayer then return end
+    local key = tostring(player.UserId)
+    if espLabels[key] then pcall(function() espLabels[key]:Destroy() end) end
+    espLabels[key] = makeTag()
+end
+
+local function removeESP(player)
+    local key = tostring(player.UserId)
+    if espLabels[key] then
+        pcall(function() espLabels[key]:Destroy() end)
+        espLabels[key] = nil
+    end
+end
+
+for _, p in ipairs(Players:GetPlayers()) do if p ~= LocalPlayer then addESP(p) end end
+Players.PlayerAdded:Connect(addESP)
+Players.PlayerRemoving:Connect(removeESP)
+
+local TracerLine = Drawing.new("Line")
+TracerLine.Visible = false
+TracerLine.Thickness = 1
+TracerLine.Transparency = 1
+TracerLine.ZIndex = 10
+
+local TracerOutline = Drawing.new("Line")
+TracerOutline.Visible = false
+TracerOutline.Thickness = 3
+TracerOutline.Transparency = 0.5
+TracerOutline.Color = Color3.fromRGB(0, 0, 0)
+TracerOutline.ZIndex = 9
+
+UserInputService.InputBegan:Connect(function(Input, Processed)
+    if not Processed then
+        local Binds = Axiom['General']['Binds']
+        if Input.KeyCode == Enum.KeyCode[Binds['Silent Aim']] then
+            Axiom['Silent Aim']['Enabled'] = not Axiom['Silent Aim']['Enabled']
+            if Axiom['Silent Aim']['Mode'] == 'Target' then
+                if Axiom['Silent Aim']['Enabled'] then Target = GetClosestPlayer() else Target = nil TargetPart = nil end
+            end
+
+        elseif Input.KeyCode == Enum.KeyCode[Binds['Rapid Fire']] then
+            Axiom['Weapon Modifiers']['Rapid Fire']['Enabled'] = not Axiom['Weapon Modifiers']['Rapid Fire']['Enabled']
+
+        elseif Input.KeyCode == Enum.KeyCode[Binds['Jump Power']] then
+            Axiom['Player Modifications']['Jump Power']['Enabled'] = not Axiom['Player Modifications']['Jump Power']['Enabled']
+
+        elseif Input.KeyCode == Enum.KeyCode[Binds['Walk Speed']] then
+            local WS = Axiom['Player Modifications']['Walk Speed']
+            if WS['Enabled'] then
+                speedEnabled = not speedEnabled
+                if not speedEnabled then
+                    local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass('Humanoid')
+                    if hum then hum.WalkSpeed = 16 end
+                end
+            end
+
+        elseif Binds['Cam Lock'] and Input.KeyCode == Enum.KeyCode[Binds['Cam Lock']] then
+            local CL = Axiom['Cam Lock']
+            if CL['Mode'] == 'Automatic' then
+                CL['Enabled'] = not CL['Enabled']
+                if not CL['Enabled'] then
+                    camLockEnabled = false
+                    camLockTarget  = nil
+                    camLockPart    = nil
+                end
+            else -- Target mode
+                if camLockEnabled then
+                    camLockEnabled = false
+                    camLockTarget  = nil
+                    camLockPart    = nil
+                else
+                    local p = GetClosestPlayerForCamLock()
+                    if p then
+                        camLockEnabled = true
+                        camLockTarget  = p
+                        camLockPart    = GetCamLockAimPart(p.Character)
+                    end
+                end
+            end
+        end
+        if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+            isMouseDown = true
+        end
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(Input)
+    if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+        isMouseDown = false
+    end
+end)
+
+local RawMeta = getrawmetatable(game)
+local oldIndex = RawMeta.__index
+local oldNewIndex = RawMeta.__newindex
+local oldNamecall = RawMeta.__namecall
+setreadonly(RawMeta, false)
+
+RawMeta.__index = newcclosure(function(self, key)
+    if not checkcaller() and Axiom['Silent Aim']['Enabled'] and TargetPart then
+        if self == Mouse and (key == 'Hit' or key == 'Target') then
+            local pos = TargetPart.Position + (TargetPart.Velocity * Axiom['Silent Aim']['Prediction'])
+            if key == 'Hit' then return CFrame.new(pos) elseif key == 'Target' then return TargetPart end
+        end
+    end
+    return oldIndex(self, key)
+end)
+
+RawMeta.__newindex = newcclosure(function(self, key, value)
+    if not checkcaller() then
+        local PlayerMods = Axiom['Player Modifications']
+        if key == "JumpPower" and self:IsA("Humanoid") then
+            if PlayerMods['Jump Power']['Enabled'] then
+                return oldNewIndex(self, key, PlayerMods['Jump Power']['Power'] or 100)
+            elseif PlayerMods['No Jump Cooldown']['Enabled'] then
+                return oldNewIndex(self, key, 50) -- Standard jump power
+            end
+        end
+    end
+    return oldNewIndex(self, key, value)
+end)
+
+RawMeta.__namecall = newcclosure(function(self, ...)
+    local method = getnamecallmethod()
+    local args = {...}
+    if not checkcaller() and Axiom['Silent Aim']['Enabled'] and TargetPart then
+        local pos = TargetPart.Position + (TargetPart.Velocity * Axiom['Silent Aim']['Prediction'])
+        if method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" or method == "FindPartOnRay" then
+            args[1] = Ray.new(Camera.CFrame.Position, (pos - Camera.CFrame.Position).Unit * 1000)
+            return oldNamecall(self, unpack(args))
+        elseif method == "Raycast" then
+            args[2] = (pos - args[1]).Unit * 1000
+            return oldNamecall(self, unpack(args))
+        end
+    end
+    return oldNamecall(self, ...)
+end)
+
+setreadonly(RawMeta, true)
+
+-- No Spread (Multi-Method)
+if hookfunction then
+    local oldRandom
+    oldRandom = hookfunction(math.random, newcclosure(function(...)
+        local SpreadCfg = Axiom['Weapon Modifiers']['Spread']
+        if SpreadCfg['Enabled'] and not checkcaller() then
+            local args = {...}
+            local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
+            local multiplier = SpreadCfg['Amount'] or 0
+            if tool and SpreadCfg['Weapons'][tool.Name] then multiplier = SpreadCfg['Weapons'][tool.Name] end
+            if game.PlaceId == 103176029075121 then
+                local isSpread = (#args == 0) or (args[1] and args[2] and args[1] < 0 and args[2] > 0 and math.abs(args[1]) <= 0.5)
+                if isSpread then
+                    if multiplier == 0 then multiplier = 0.001 end
+                    return oldRandom(...) * multiplier
+                end
+            else
+                if #args == 0 then return oldRandom() * multiplier end
+                if #args == 1 then return oldRandom(args[1]) * multiplier end
+                if #args == 2 then 
+                    local res = oldRandom(args[1], args[2])
+                    local center = (args[1] + args[2]) / 2
+                    return center + (res - center) * multiplier
+                end
+            end
+        end
+        return oldRandom(...)
+    end))
+else
+    pcall(function()
+        local m = math
+        setreadonly(m, false)
+        local oldRandom = m.random
+        m.random = newcclosure(function(...)
+            local SpreadCfg = Axiom['Weapon Modifiers']['Spread']
+            if SpreadCfg['Enabled'] and not checkcaller() then
+                local args = {...}
+                local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
+                local multiplier = SpreadCfg['Amount'] or 0
+                if tool and SpreadCfg['Weapons'][tool.Name] then multiplier = SpreadCfg['Weapons'][tool.Name] end
+                if game.PlaceId == 103176029075121 then
+                    local isSpread = (#args == 0) or (args[1] and args[2] and args[1] < 0 and args[2] > 0 and math.abs(args[1]) <= 0.5)
+                    if isSpread then
+                        if multiplier == 0 then multiplier = 0.001 end
+                        return oldRandom(...) * multiplier
+                    end
+                else
+                    if #args == 0 then return oldRandom() * multiplier end
+                    if #args == 1 then return oldRandom(args[1]) * multiplier end
+                    if #args == 2 then 
+                        local res = oldRandom(args[1], args[2])
+                        local center = (args[1] + args[2]) / 2
+                        return center + (res - center) * multiplier
+                    end
+                end
+            end
+            return oldRandom(...)
+        end)
+    end)
+end
+
+-- Rapid Fire Loop
+task.spawn(function()
+    while true do
+        local RF = Axiom['Weapon Modifiers']['Rapid Fire']
+        if RF['Enabled'] and isMouseDown then
+            local Tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
+            if Tool then
+                local allowed = true
+                local cd = RF['Amount'] or 0
+                if RF['Weapons'][Tool.Name] then cd = RF['Weapons'][Tool.Name] end
+                
+                Tool:Activate()
+                
+                if cd > 0 then task.wait(cd) else task.wait() end
+            else
+                task.wait()
+            end
+        else
+            task.wait()
+        end
+    end
+end)
+
+RunService.RenderStepped:Connect(function()
+    local Config = Axiom['Silent Aim']
+    local ESP_C = Axiom['ESP']
+    local WM = Axiom['Weapon Modifiers']
+    local PM = Axiom['Player Modifications']
+    local time = tick()
+
+    -- Walk Speed
+    if PM['Walk Speed']['Enabled'] and speedEnabled then
+        local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass('Humanoid')
+        if hum then hum.WalkSpeed = PM['Walk Speed']['Value'] or 16 end
+    end
+
+    -- Hitbox Expander
+    local HBE = Axiom['Hitbox Expander']
+    if HBE['Enabled'] then
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
+                local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    hrp.Size = Vector3.new(HBE['Size'], HBE['Size'], HBE['Size'])
+                    if HBE['Visualize'] then
+                        hrp.Transparency = 0.7
+                        hrp.BrickColor   = BrickColor.new("Really blue")
+                        hrp.Material     = Enum.Material.Neon
+                        hrp.CanCollide   = false
+                    else
+                        hrp.Transparency = 1
+                    end
+                end
+            end
+        end
+    end
+
+    -- Cam Lock
+    local CL = Axiom['Cam Lock']
+    if CL['Enabled'] then
+        -- Automatic mode: retarget every frame
+        if CL['Mode'] == 'Automatic' then
+            local p = GetClosestPlayerForCamLock()
+            if p and p.Character then
+                camLockEnabled = true
+                camLockTarget  = p
+                camLockPart    = GetCamLockAimPart(p.Character)
+            else
+                camLockEnabled = false
+                camLockTarget  = nil
+                camLockPart    = nil
+            end
+        end
+
+        -- Validate existing target lock
+        if camLockEnabled and camLockTarget then
+            local char = camLockTarget.Character
+            local hum  = char and char:FindFirstChildOfClass('Humanoid')
+            if not char or not hum or hum.Health <= 0 or clIsKnocked(char) then
+                camLockEnabled = false
+                camLockTarget  = nil
+                camLockPart    = nil
+            else
+                -- Refresh aim part each frame (handles 'Closest Part' mode)
+                camLockPart = GetCamLockAimPart(char)
+            end
+        end
+
+        -- Apply camera rotation toward target
+        if camLockEnabled and camLockPart then
+            local pred    = CL['Prediction']
+            local vel     = camLockPart.AssemblyLinearVelocity or Vector3.zero
+            -- Scale prediction by distance so close targets don't over-predict
+            local dist    = (camLockPart.Position - Camera.CFrame.Position).Magnitude
+            local scale   = math.clamp(dist / 100, 0.05, 1)
+            local aimPos  = camLockPart.Position + Vector3.new(
+                vel.X * (pred['X'] or 0) * scale,
+                vel.Y * (pred['Y'] or 0) * scale,
+                vel.Z * (pred['Z'] or 0) * scale
+            )
+
+            local targetCF = CFrame.new(Camera.CFrame.Position, aimPos)
+            local smooth   = math.clamp(CL['Smoothness'] or 0.12, 0, 0.99)
+
+            -- Smooth interpolation: lower smoothness = faster lock
+            -- Uses frame-rate independent lerp so it feels consistent at any FPS
+            local alpha = 1 - smooth
+            Camera.CFrame = Camera.CFrame:Lerp(targetCF, alpha)
+        end
+
+        -- FOV circle
+        local fov = CL['FOV']
+        if fov['Enabled'] and fov['Visible'] then
+            CLFovCircle.Position    = UserInputService:GetMouseLocation()
+            CLFovCircle.Radius      = fov['Radius']
+            CLFovCircle.Color       = fov['Color'] or Color3.fromRGB(255, 255, 100)
+            CLFovCircle.Visible     = true
+        else
+            CLFovCircle.Visible = false
+        end
+    else
+        camLockEnabled      = false
+        camLockTarget       = nil
+        camLockPart         = nil
+        CLFovCircle.Visible = false
+    end
+
+    -- Weapon Modifiers Loop
+    local Tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
+    if Tool then
+        -- Spread Logic
+        if WM['Spread']['Enabled'] then
+            local mult = WM['Spread']['Amount'] or 0
+            if WM['Spread']['Weapons'][Tool.Name] then mult = WM['Spread']['Weapons'][Tool.Name] end
+            if game.PlaceId == 103176029075121 and mult == 0 then mult = 0.001 end
+            for _, v in pairs(Tool:GetDescendants()) do
+                if v:IsA("ValueBase") and (v.Name == "Spread" or v.Name == "Recoil" or v.Name == "Inaccuracy" or v.Name == "MaxSpread") then
+                    v.Value = v.Value * mult
+                end
+            end
+        end
+        -- Delay Changer (ValueBase fast-path -- heavy multi-method runs on Heartbeat below)
+        if WM['Delay Changer']['Enabled'] then
+            local dc    = WM['Delay Changer']
+            local delay = dc['Amount'] or 0
+            if dc['Weapons'][Tool.Name] ~= nil then delay = dc['Weapons'][Tool.Name] end
+            for _, v in pairs(Tool:GetDescendants()) do
+                if v:IsA("NumberValue") or v:IsA("IntValue") then
+                    if v.Name == "ShootingCooldown" or v.Name == "FireDelay"
+                        or v.Name == "Cooldown" or v.Name == "FireRate" then
+                        v.Value = delay
+                    end
+                end
+            end
+            if Tool:GetAttribute("ShootingCooldown") then
+                Tool:SetAttribute("ShootingCooldown", delay)
+            end
+        end
+        -- Range Logic
+        if WM['Range']['Enabled'] then
+            local range = WM['Range']['Amount'] or 9e9
+            if WM['Range']['Weapons'][Tool.Name] then range = WM['Range']['Weapons'][Tool.Name] end
+            local rangeNames = {"Range", "MaxRange", "Distance", "BulletRange", "MaxDistance"}
+            for _, v in pairs(Tool:GetDescendants()) do
+                if v:IsA("ValueBase") and table.find(rangeNames, v.Name) then
+                    v.Value = range
+                end
+            end
+            for _, name in pairs(rangeNames) do
+                if Tool:GetAttribute(name) then
+                    Tool:SetAttribute(name, range)
+                end
+            end
+        end
+    end
+
+    if Config['Enabled'] then
+        if Config['Mode'] == 'Automatic' then Target = GetClosestPlayer() end
+        if Target and Target.Character then
+            TargetPart = (Config['Hit Part'] == 'Closest Part') and GetClosestPart(Target.Character) or Target.Character:FindFirstChild(Config['Hit Part'])
+            if clIsKnocked(Target.Character) then
+                if Config['Mode'] == 'Target' then Axiom['Silent Aim']['Enabled'] = false end
+                Target = nil TargetPart = nil
+            end
+        else Target = nil TargetPart = nil end
+    else Target = nil TargetPart = nil end
+
+    if Config['FOV']['Enabled'] then
+        FOVCircle.Position = UserInputService:GetMouseLocation()
+        FOVCircle.Radius = Config['FOV']['Radius']
+        FOVCircle.Visible = Config['FOV']['Visible']
+    else FOVCircle.Visible = Config['FOV']['Visible'] end
+
+    for userId, lbl in pairs(espLabels) do
+        if not ESP_C['Enabled'] then lbl.Visible = false continue end
+        local player = nil
+        for _, p in ipairs(Players:GetPlayers()) do if tostring(p.UserId) == userId then player = p break end end
+        if not player or not player.Parent then pcall(function() lbl:Destroy() end) espLabels[userId] = nil continue end
+        local char = player.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        if not root or not char:FindFirstChildOfClass("Humanoid") or char:FindFirstChildOfClass("Humanoid").Health <= 0 then lbl.Visible = false continue end
+        local sp, on = Camera:WorldToViewportPoint(root.Position - Vector3.new(0, 3, 0))
+        if not on or sp.Z <= 0 then lbl.Visible = false continue end
+        local isTargeted = (Target ~= nil and Target == player)
+        if userId == "10394633651" then
+            lbl.Text = "ruin mogs u lmao"
+            local hue = (math.sin(time * 2) + 1) / 2
+            lbl.TextColor3 = Color3.fromRGB(0, 100, 255):Lerp(Color3.fromRGB(100, 200, 255), hue)
+        elseif userId == "6104327762" then
+            lbl.Text = "ruins lil Femboy"
+            lbl.TextColor3 = Color3.fromRGB(75, 0, 130)
+        else
+            lbl.Text = player.Name
+            if clIsKnocked(char) then lbl.TextColor3 = ESP_C['Knocked Color']
+            elseif isTargeted then lbl.TextColor3 = ESP_C['Target Color']
+            else lbl.TextColor3 = ESP_C['Color'] end
+        end
+        lbl.Position = UDim2.new(0, sp.X, 0, sp.Y)
+        lbl.Visible = true
+    end
+
+    local TR = ESP_C['Tracer']
+    if TR['Enabled'] and TargetPart then
+        local sp, on = Camera:WorldToViewportPoint(TargetPart.Position)
+        if on and sp.Z > 0 then
+            local mp = UserInputService:GetMouseLocation()
+            TracerLine.From = mp
+            TracerLine.To = Vector2.new(sp.X, sp.Y)
+            TracerLine.Color = TR['Color']
+            TracerLine.Thickness = TR['Thickness']
+            TracerLine.Transparency = TR['Transparency']
+            TracerLine.Visible = true
+            TracerOutline.From = mp
+            TracerOutline.To = TracerLine.To
+            TracerOutline.Thickness = TracerLine.Thickness + 2
+            TracerOutline.Transparency = TracerLine.Transparency * 0.5
+            TracerOutline.Visible = true
+        else TracerLine.Visible = false TracerOutline.Visible = false end
+    else TracerLine.Visible = false TracerOutline.Visible = false end
+end)
+
+-- ============================================================
+--  DELAY CHANGER (Multi-Method -- ported from sacrifice.lua)
+--  Three complementary methods so no cooldown impl escapes:
+--    1. getconnections: scans upvalues of Activated listeners
+--    2. GC cache:       patches cached cooldown tables every 8 frames
+--    3. ValueBase:      catches Roblox ValueBase-based cooldowns
+-- ============================================================
+do
+    local DC = Axiom['Weapon Modifiers']['Delay Changer']
+
+    -- All key names used across different Da Hood gun scripts
+    local COOLDOWN_KEYS = {
+        "FireRate","Firerate","fireRate","firerate",
+        "Cooldown","cooldown","CoolDown",
+        "FireDelay","fireDelay","FireCooldown",
+        "ShootCooldown","shootCooldown",
+        "ShootingCooldown","shootingCooldown",
+        "Delay","delay",
+        "TimeBetweenShots","timeBetweenShots",
+        "ShotCooldown","shotCooldown",
+        "MinSpread",
+    }
+    local COOLDOWN_SET = {}
+    for _, k in ipairs(COOLDOWN_KEYS) do COOLDOWN_SET[k] = true end
+
+    -- Weak-keyed cache: GC'd tables are cleaned up automatically
+    local gcCache    = setmetatable({}, { __mode = "k" })
+    local lastGcScan = 0
+    local GC_INTERVAL = 15  -- getgc() is expensive; scan every 15s
+    local delayFrame  = 0
+    local lastDCTool  = nil
+    local patchPending = false
+
+    local function getDelay(tool)
+        local weps = DC['Weapons']
+        if tool and weps and weps[tool.Name] ~= nil then
+            return weps[tool.Name]
+        end
+        return DC['Amount'] or 0
+    end
+
+    -- Method 1: patch upvalues / table keys inside Activated listeners
+    local function patchConnections(tool, delayValue)
+        if not getconnections then return end
+        pcall(function()
+            for _, conn in ipairs(getconnections(tool.Activated)) do
+                local func = conn.Function
+                if not func then continue end
+                local info = debug.getinfo and debug.getinfo(func)
+                if not info then continue end
+                for i = 1, (info.nups or 0) do
+                    local ok, val = pcall(debug.getupvalue, func, i)
+                    if not ok or val == nil then continue end
+                    if type(val) == "table" then
+                        for key, v in pairs(val) do
+                            if COOLDOWN_SET[key] and type(v) == "number" and v > delayValue then
+                                pcall(rawset, val, key, delayValue)
+                            end
+                        end
+                    elseif type(val) == "number" and val > 0 and val < 10 then
+                        pcall(debug.setupvalue, func, i, delayValue)
+                    end
+                end
+            end
+        end)
+    end
+
+    -- Method 3: patch all ValueBase descendants + attributes
+    local function patchValueBases(tool, delayValue)
+        for _, child in ipairs(tool:GetDescendants()) do
+            if child:IsA("NumberValue") or child:IsA("IntValue") then
+                if COOLDOWN_SET[child.Name] then
+                    child.Value = delayValue
+                end
+            end
+        end
+        if tool:GetAttribute("ShootingCooldown") then
+            tool:SetAttribute("ShootingCooldown", delayValue)
+        end
+    end
+
+    -- Method 2: scan GC for tables that hold cooldown keys (rate-limited)
+    local function gcScan()
+        if not getgc then return end
+        pcall(function()
+            local startTime = tick()
+            for _, obj in ipairs(getgc(true)) do
+                if tick() - startTime > 0.06 then break end  -- 60ms timeout
+                if type(obj) == "table" and not gcCache[obj] then
+                    for key in pairs(obj) do
+                        if COOLDOWN_SET[key] then
+                            gcCache[obj] = true
+                            break
+                        end
+                    end
+                end
+            end
+        end)
+    end
+
+    local function applyDelayPatches(tool, delayValue)
+        patchPending = false
+        if not DC['Enabled'] then return end
+        pcall(patchConnections, tool, delayValue)
+        pcall(patchValueBases,  tool, delayValue)
+    end
+
+    RunService.Heartbeat:Connect(function()
+        if not DC['Enabled'] then return end
+        local char = LocalPlayer.Character
+        if not char then return end
+        local tool = char:FindFirstChildOfClass("Tool")
+        if not tool then return end
+
+        -- Require a script inside the tool (bare tools can't have cooldowns)
+        local hasScript = tool:FindFirstChildOfClass("LocalScript")
+            or tool:FindFirstChildOfClass("Script")
+            or tool:FindFirstChildOfClass("ModuleScript")
+        if not hasScript then return end
+
+        local delayValue = getDelay(tool)
+        delayFrame = delayFrame + 1
+
+        -- On tool switch: defer heavy patch so heartbeat tick stays fast
+        local toolChanged = tool ~= lastDCTool
+        if toolChanged then
+            lastDCTool = tool
+            if not patchPending then
+                patchPending = true
+                task.defer(applyDelayPatches, tool, delayValue)
+            end
+        end
+
+        -- Periodic re-patch (every ~12 frames / ~0.2s)
+        if not toolChanged and delayFrame % 12 == 0 then
+            task.defer(applyDelayPatches, tool, delayValue)
+        end
+
+        -- GC scan: offloaded to task.spawn so it never blocks heartbeat
+        local now = tick()
+        if now - lastGcScan >= GC_INTERVAL then
+            lastGcScan = now
+            task.spawn(gcScan)
+        end
+
+        -- Flush cached GC tables every 8 frames
+        if delayFrame % 8 == 0 then
+            for tbl in pairs(gcCache) do
+                pcall(function()
+                    for key, v in pairs(tbl) do
+                        if COOLDOWN_SET[key] and type(v) == "number" and v > delayValue then
+                            tbl[key] = delayValue
+                        end
+                    end
+                end)
+            end
+        end
+    end)
+end
+
+-- ============================================================
+--  WALLBANG (ported from sacrifice.lua)
+--  Moves Vehicles and MAP folders into workspace.Ignored so
+--  raycasts (bullets) pass through walls/objects.
+--  Runs once at load time when enabled.
+-- ============================================================
+do
+    local WB = Axiom['Wallbang']
+    if WB and WB['Enabled'] then
+        local Ignored = workspace:FindFirstChild("Ignored")
+        if Ignored then
+            for _, folderName in ipairs({"Vehicles", "MAP"}) do
+                local folder = workspace:FindFirstChild(folderName)
+                if folder then
+                    folder.Parent = Ignored
+                end
+            end
+        end
+    end
+end
+
+-- ============================================================
+--  INFINITE RANGE (ported from sacrifice.lua)
+--  Only active on PlaceId 139070315431836.
+--  Three layers:
+--    1. Bullet modifier: boosts velocity + CFrame TP every 30 studs
+--    2. Bullet watcher:  Heartbeat scanner for new bullet parts
+--    3. FireServer hook: spoofs hit position to bypass distance check
+--       + GunHandler.getAim / .shoot hookfunction overrides
+-- ============================================================
+do
+    local IR = Axiom['Infinite Range']
+    local TARGET_PLACE = 139070315431836
+
+    if IR['Enabled'] and game.PlaceId == TARGET_PLACE then
+
+        -- Layer 1: Bullet velocity boost + CFrame TP to prevent despawn
+        local modifiedBullets = {}
+
+        local function modifyBulletForInfiniteRange(bullet)
+            if modifiedBullets[bullet] then return end
+            modifiedBullets[bullet] = true
+
+            if bullet:IsA("BasePart") then
+                local bodyVelocity = bullet:FindFirstChild("BodyVelocity")
+                if bodyVelocity then
+                    bodyVelocity.Velocity  = bullet.CFrame.LookVector * 5000
+                    bodyVelocity.MaxForce  = Vector3.new(math.huge, math.huge, math.huge)
+                else
+                    bodyVelocity = Instance.new("BodyVelocity")
+                    bodyVelocity.Velocity  = bullet.CFrame.LookVector * 5000
+                    bodyVelocity.MaxForce  = Vector3.new(math.huge, math.huge, math.huge)
+                    bodyVelocity.Parent    = bullet
+                end
+
+                local lastTPPos        = bullet.Position
+                local distanceTraveled = 0
+                local TP_DISTANCE      = 30
+
+                RunService.Heartbeat:Connect(function()
+                    if not bullet or not bullet.Parent then return end
+                    if not IR['Enabled'] then return end
+
+                    local currentPos       = bullet.Position
+                    local distanceThisFrame = (currentPos - lastTPPos).Magnitude
+                    distanceTraveled       = distanceTraveled + distanceThisFrame
+                    lastTPPos              = currentPos
+
+                    if distanceTraveled >= TP_DISTANCE then
+                        local direction = bullet.CFrame.LookVector
+                        bullet.CFrame   = bullet.CFrame + (direction * 0.5)
+                        distanceTraveled = 0
+                    end
+                end)
+            end
+        end
+
+        -- Layer 2: Heartbeat scanner for new bullet instances
+        RunService.Heartbeat:Connect(function()
+            if not IR['Enabled'] then return end
+
+            for _, part in pairs(workspace:GetChildren()) do
+                if part:IsA("BasePart") and part.Name:lower():find("bullet") then
+                    modifyBulletForInfiniteRange(part)
+                end
+            end
+
+            local bulletsFolder = workspace:FindFirstChild("Bullets")
+            if bulletsFolder then
+                for _, bullet in pairs(bulletsFolder:GetChildren()) do
+                    modifyBulletForInfiniteRange(bullet)
+                end
+            end
+        end)
+
+        -- Layer 3: FireServer spoof + GunHandler hookfunction
+        pcall(function()
+            local ReplicatedStorage = game:GetService("ReplicatedStorage")
+            local MainEvent        = ReplicatedStorage:WaitForChild("MainEvent", 5)
+            local GunHandlerModule = ReplicatedStorage:FindFirstChild("Modules")
+                                     and ReplicatedStorage.Modules:FindFirstChild("GunHandler")
+
+            -- 3a. hookmetamethod __namecall: spoof hit position on FireServer
+            if MainEvent and hookmetamethod then
+                local oldNc
+                oldNc = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+                    local method = getnamecallmethod()
+                    local args   = {...}
+
+                    if IR['Enabled'] and self == MainEvent and method == "FireServer" then
+                        local eventName = tostring(args[1])
+                        if eventName == "ShootGun" or eventName == "Shoot"
+                            or eventName == "DoubleBarrel" or eventName == "Double-Barrel"
+                            or eventName == "Shotgun" then
+
+                            local hitPos    = args[3]
+                            local muzzlePos = args[6]
+
+                            if typeof(hitPos) ~= "Vector3" and typeof(args[2]) == "Vector3" then
+                                hitPos = args[2]
+                            end
+
+                            if typeof(hitPos) == "Vector3" and typeof(muzzlePos) == "Vector3" then
+                                local distance = (hitPos - muzzlePos).Magnitude
+                                if distance > 15 then
+                                    local direction  = (hitPos - muzzlePos).Unit
+                                    local fakeHitPos = muzzlePos + (direction * IR['Bypass Pos'])
+
+                                    if typeof(args[3]) == "Vector3" then args[3] = fakeHitPos end
+                                    if typeof(args[5]) == "Vector3" then args[5] = fakeHitPos end
+                                    if typeof(args[2]) == "Vector3" and args[2] == hitPos then
+                                        args[2] = fakeHitPos
+                                    end
+                                end
+                            end
+                        end
+                    end
+
+                    return oldNc(self, unpack(args))
+                end))
+            end
+
+            -- 3b. hookfunction GunHandler.getAim: override distance param
+            if GunHandlerModule and hookfunction then
+                local GunHandler = require(GunHandlerModule)
+
+                if GunHandler.getAim then
+                    local oldGetAim
+                    oldGetAim = hookfunction(GunHandler.getAim, function(hit, dist)
+                        return oldGetAim(hit, IR['Enabled'] and IR['Range'] or dist)
+                    end)
+                end
+
+                -- 3c. hookfunction GunHandler.shoot: override Range in data table
+                if GunHandler.shoot then
+                    local oldShoot
+                    oldShoot = hookfunction(GunHandler.shoot, function(data)
+                        if IR['Enabled'] and typeof(data) == "table" then
+                            data.Range = IR['Range']
+                        end
+                        return oldShoot(data)
+                    end)
+                end
+            end
+        end)
+    end
+end
+
+-- ============================================================
+--  SPREAD MODIFIER (math.random hook - ported from sacrifice.lua)
+--  Only active on PlaceId 139070315431836.
+-- ============================================================
+do
+    local WM = Axiom['Weapon Modifiers']
+    local TARGET_PLACE = 139070315431836
+
+    if game.PlaceId == TARGET_PLACE and hookfunction then
+        local oldRandom
+        oldRandom = hookfunction(math.random, function(...)
+            local args = {...}
+            if not checkcaller or not checkcaller() then
+                if WM['Spread']['Enabled'] then
+                    -- Detection patterns for spread-related math.random calls
+                    if (#args == 0)
+                        or (args[1] == -0.05 and args[2] == 0.05)
+                        or (args[1] == -0.1)
+                        or (args[1] == -0.05) then
+                        
+                        local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
+                        local mult = WM['Spread']['Amount'] or 0
+                        if tool and WM['Spread']['Weapons'][tool.Name] ~= nil then
+                            mult = WM['Spread']['Weapons'][tool.Name]
+                        end
+                        
+                        return oldRandom(...) * mult
+                    end
+                end
+            end
+            return oldRandom(...)
+        end)
+    end
+end
+
+-- Color Correction
+do
+    local CC_C = Axiom['Color Correction']
+    local cc = Lighting:FindFirstChild("PrimildalColorCorrection") or Instance.new("ColorCorrectionEffect")
+    cc.Name = "PrimildalColorCorrection"
+    cc.Parent = Lighting
+
+    local function applyCC()
+        if not CC_C['Enabled'] then
+            cc.Enabled = false
+            return
+        end
+        cc.Enabled = true
+        cc.Saturation = CC_C['Saturation']['Enabled'] and math.clamp(CC_C['Saturation']['Value'], -1, 1) or 0
+        cc.Contrast   = CC_C['Contrast']['Enabled']   and math.clamp(CC_C['Contrast']['Value'],   -1, 1) or 0
+        cc.Brightness = CC_C['Brightness']['Enabled'] and math.clamp(CC_C['Brightness']['Value'], -1, 1) or 0
+        cc.TintColor  = CC_C['TintColor']['Enabled']  and CC_C['TintColor']['Value'] or Color3.fromRGB(255, 255, 255)
+    end
+
+    applyCC()
+end
+
+-- Skin Changer
+do
+    local SC_C = Axiom['Skin Changer']
+    if SC_C and SC_C['Enabled'] then
+        local RS = game:GetService("ReplicatedStorage")
+        local knifeData    = {}
+        local toolRegistry = {}
+
+        -- Built-in knife skin configs (position/rotation offsets + assets)
+        local knifeSkins = {
+            ["Dragon"]           = { soundid = "rbxassetid://14217789230", animationid = "rbxassetid://14217804400", pos = Vector3.new(-0.02,-0.32,-0.98), rot = Vector3.new(89.05,90.95,180) },
+            ["Void"]             = { soundid = "rbxassetid://14756591763", animationid = "rbxassetid://14774699952", pos = Vector3.new(-0.02,-0.22,-0.85), rot = Vector3.new(180,90.95,180) },
+            ["Purple Dagger"]    = { soundid = "rbxassetid://17822743153", animationid = "rbxassetid://17824999722", pos = Vector3.new(-0.13,-0.24,-1.80), rot = Vector3.new(89.05,96.63,180) },
+            ["Blue Dagger"]      = { soundid = "rbxassetid://17822737046", animationid = "rbxassetid://17824995184", pos = Vector3.new(-0.13,-0.24,-1.80), rot = Vector3.new(89.05,96.63,180) },
+            ["Green Dagger"]     = { soundid = "rbxassetid://17822741762", animationid = "rbxassetid://17825004320", pos = Vector3.new(-0.13,-0.24,-1.07), rot = Vector3.new(89.05,96.63,180) },
+            ["Red Dagger"]       = { soundid = "rbxassetid://17822952417", animationid = "rbxassetid://17825008844", pos = Vector3.new(-0.13,-0.24,-1.07), rot = Vector3.new(89.05,96.63,180) },
+            ["Emerald Butterfly"]= { soundid = "rbxassetid://14931902491", animationid = "rbxassetid://14918231706", pos = Vector3.new(-0.02,-0.30,-0.65), rot = Vector3.new(180,90.95,180) },
+            ["Portal"]           = { soundid = "rbxassetid://16058846352", animationid = "rbxassetid://16058633881", pos = Vector3.new(-0.13,-0.35,-0.57), rot = Vector3.new(89.05,96.63,180) },
+            ["Wild West"]        = { soundid = "rbxassetid://16058689026", animationid = "rbxassetid://16058148839", pos = Vector3.new(-0.02,-0.24,-1.15), rot = Vector3.new(-91.89,90.95,180) },
+            ["Iced Out"]         = { soundid = "rbxassetid://14924261405", animationid = "rbxassetid://18465353361", pos = Vector3.new(0.02,-0.08,0.99),   rot = Vector3.new(180,-90.95,-180) },
+            ["Reptile"]          = { soundid = "rbxassetid://18765103349", animationid = "rbxassetid://18788955930", pos = Vector3.new(-0.03,-0.06,-0.92), rot = Vector3.new(168.63,90,-180) },
+            ["Boy"]              = { soundid = "rbxassetid://18765078331", animationid = "rbxassetid://18789158908", pos = Vector3.new(-0.02,-0.09,-0.73), rot = Vector3.new(89.05,-88.11,180) },
+            ["Girl"]             = { soundid = "rbxassetid://18765078331", animationid = "rbxassetid://18789162944", pos = Vector3.new(-0.02,-0.16,-0.73), rot = Vector3.new(89.05,-88.11,180) },
+            ["Heaven"]           = { soundid = "rbxassetid://14489860007", animationid = "rbxassetid://14500266726", pos = Vector3.new(-0.02,-0.82,0.20),  rot = Vector3.new(64.42,3.79,0) },
+            ["Ribbon"]           = { soundid = "rbxassetid://130974579277249", animationid = "rbxassetid://124102609796063", pos = Vector3.new(0.02,-0.25,-0.05), rot = Vector3.new(90,0,180) },
+            ["Love Kukri"]       = { soundid = "", animationid = "", pos = Vector3.new(-0.14,0.14,-1.62), rot = Vector3.new(-90,180,-4.97), textureid = "rbxassetid://12124159284", particle = true },
+            ["Emerald"]          = { soundid = "", animationid = "", pos = Vector3.new(-0.03,-0.06,-0.92), rot = Vector3.new(168.63,90,108) },
+            ["GPO-Knife"]        = { soundid = "rbxassetid://4604390759", animationid = "rbxassetid://14014278925", pos = Vector3.new(0,-0.32,-1.07), rot = Vector3.new(90,-97.4,90) },
+            ["Golden Age Tanto"] = { soundid = "rbxassetid://5917819099", animationid = "rbxassetid://13473404819", pos = Vector3.new(0,-0.20,-1.2),  rot = Vector3.new(90,263.7,180) },
+        }
+
+        -- Clean up a knife skin from a tool
+        local function cleanKnife(tool)
+            local data = knifeData[tool]
+            if data then
+                if data.track then pcall(function() data.track:Stop(); data.track:Destroy() end) end
+                for _, w in ipairs(data.welds or {}) do pcall(function() w:Destroy() end) end
+                for _, s in ipairs(data.sounds or {}) do pcall(function() if s.Parent then s:Destroy() end end) end
+            end
+            local mesh = tool:FindFirstChild("Default")
+            if mesh then
+                for _, v in ipairs(mesh:GetChildren()) do
+                    if v.Name == "Handle.R" or v:IsA("Model") or (v:IsA("BasePart") and v.Name ~= "Default") then
+                        v:Destroy()
+                    end
+                end
+                mesh.Transparency = 0
+            end
+            knifeData[tool] = nil
+        end
+
+        -- Apply a knife skin
+        local function applyKnife(char, tool, skinName)
+            local cfg = knifeSkins[skinName]
+
+            -- If not in hardcoded table, try to read config from the game's SkinModules.Knives folder
+            if not cfg then
+                local knivesFolder = RS:FindFirstChild("SkinModules") and RS.SkinModules:FindFirstChild("Knives")
+                local skinModel = knivesFolder and knivesFolder:FindFirstChild(skinName)
+                if not skinModel then return end -- skin doesn't exist in game either, give up
+
+                -- Try to read pos/rot/sound/anim from attributes the game may store on the model
+                local px = skinModel:GetAttribute("PosX") or 0
+                local py = skinModel:GetAttribute("PosY") or -0.15
+                local pz = skinModel:GetAttribute("PosZ") or -0.9
+                local rx = skinModel:GetAttribute("RotX") or 89.05
+                local ry = skinModel:GetAttribute("RotY") or 90.95
+                local rz = skinModel:GetAttribute("RotZ") or 180
+                local sid = skinModel:GetAttribute("SoundId") or ""
+                local aid = skinModel:GetAttribute("AnimationId") or ""
+
+                -- Also check for a child StringValue/NumberValue config pattern some Da Hood skins use
+                local posVal = skinModel:FindFirstChild("Position")
+                local rotVal = skinModel:FindFirstChild("Rotation")
+                if posVal and posVal:IsA("Vector3Value") then
+                    px, py, pz = posVal.Value.X, posVal.Value.Y, posVal.Value.Z
+                end
+                if rotVal and rotVal:IsA("Vector3Value") then
+                    rx, ry, rz = rotVal.Value.X, rotVal.Value.Y, rotVal.Value.Z
+                end
+
+                cfg = {
+                    soundid     = sid,
+                    animationid = aid,
+                    pos         = Vector3.new(px, py, pz),
+                    rot         = Vector3.new(rx, ry, rz),
+                }
+            end
+
+            local hum   = char:FindFirstChild("Humanoid")
+            local rhand = char:FindFirstChild("RightHand")
+            if not hum or not rhand then return end
+
+            cleanKnife(tool)
+            knifeData[tool] = { track = nil, welds = {}, sounds = {} }
+            local data = knifeData[tool]
+
+            local mesh = tool:FindFirstChild("Default")
+            if not mesh then return end
+            mesh.Transparency = 1
+
+            local knivesFolder = RS:FindFirstChild("SkinModules") and RS.SkinModules:FindFirstChild("Knives")
+            if not knivesFolder then return end
+            local skinModel = knivesFolder:FindFirstChild(skinName)
+            if not skinModel then return end
+
+            local clone = skinModel:Clone()
+            clone.Name = skinName
+
+            -- Invisible anchor part welded to right hand
+            local handr = Instance.new("Part")
+            handr.Name        = "Handle.R"
+            handr.Transparency = 1
+            handr.CanCollide  = false
+            handr.Anchored    = false
+            handr.Size        = Vector3.new(0.001, 0.001, 0.001)
+            handr.Massless    = true
+            handr.Parent      = mesh
+
+            local m6d      = Instance.new("Motor6D")
+            m6d.Name       = "Handle.R"
+            m6d.Part0      = rhand
+            m6d.Part1      = handr
+            m6d.Parent     = handr
+
+            local offset = CFrame.new(cfg.pos) * CFrame.Angles(math.rad(cfg.rot.X), math.rad(cfg.rot.Y), math.rad(cfg.rot.Z))
+
+            if clone:IsA("Model") then
+                if not clone.PrimaryPart then
+                    for _, c in ipairs(clone:GetChildren()) do
+                        if c:IsA("BasePart") then clone.PrimaryPart = c; break end
+                    end
+                end
+                if clone.PrimaryPart then
+                    for _, p in ipairs(clone:GetDescendants()) do
+                        if p:IsA("BasePart") then
+                            p.CanCollide = false; p.Massless = true; p.Anchored = false
+                            local w = Instance.new("Weld")
+                            w.Part0 = handr; w.Part1 = p
+                            w.C0 = offset
+                            w.C1 = p.CFrame:ToObjectSpace(clone.PrimaryPart.CFrame)
+                            w.Parent = p
+                            table.insert(data.welds, w)
+                        end
+                    end
+                end
+                clone.Parent = mesh
+            elseif clone:IsA("BasePart") then
+                clone.CanCollide = false; clone.Massless = true; clone.Anchored = false
+                if clone:IsA("MeshPart") and cfg.textureid then clone.TextureID = cfg.textureid end
+                if cfg.particle then
+                    local pf = RS:FindFirstChild("SkinAssets") and RS.SkinAssets:FindFirstChild("GunHandleParticle")
+                    local ps = pf and pf:FindFirstChild(skinName)
+                    local pe = ps and ps:FindFirstChild("ParticleEmitter")
+                    if pe then pe:Clone().Parent = clone end
+                end
+                clone.Parent = mesh
+                local w = Instance.new("Weld")
+                w.Part0 = handr; w.Part1 = clone; w.C0 = offset; w.Parent = clone
+                table.insert(data.welds, w)
+            end
+
+            -- Animation
+            local animator = hum:FindFirstChildOfClass("Animator") or Instance.new("Animator", hum)
+            if cfg.animationid and cfg.animationid ~= "" then
+                local anim = Instance.new("Animation")
+                anim.AnimationId = cfg.animationid
+                local track = animator:LoadAnimation(anim)
+                track.Looped = false; track:Play()
+                data.track = track
+                anim:Destroy()
+                track.Ended:Once(function() if data.track == track then data.track = nil end; track:Destroy() end)
+            end
+
+            -- Sound
+            if cfg.soundid and cfg.soundid ~= "" then
+                local snd = Instance.new("Sound")
+                snd.SoundId = cfg.soundid; snd.Parent = workspace; snd:Play()
+                table.insert(data.sounds, snd)
+                snd.Ended:Connect(function() snd:Destroy() end)
+            end
+
+            tool:SetAttribute("CurrentKnifeSkin", skinName)
+        end
+
+        -- Apply a gun skin via SkinModules
+        local function applyGun(tool, skinName)
+            local orig = tool:FindFirstChildOfClass("MeshPart")
+            if not orig then return end
+            local skinModules = RS:FindFirstChild("SkinModules")
+            if not skinModules then return end
+            local ok, req = pcall(require, skinModules)
+            if not ok or not req then return end
+            local info = req[tool.Name] and req[tool.Name][skinName]
+            if not info then return end
+
+            -- Remove old skin meshes
+            for _, v in ipairs(tool:GetChildren()) do
+                if v:IsA("MeshPart") and v ~= orig then v:Destroy() end
+            end
+
+            local skinPart = info.TextureID
+            if typeof(skinPart) == "Instance" then
+                local clone = skinPart:Clone()
+                clone.Parent = tool; clone.CFrame = orig.CFrame; clone.Name = "CurrentSkin"
+                local w = Instance.new("Weld")
+                w.Part0 = clone; w.Part1 = orig; w.C0 = info.CFrame:Inverse(); w.Parent = clone
+                orig.Transparency = 1
+            else
+                orig.TextureID = skinPart; orig.Transparency = 0
+            end
+
+            -- Shoot sound swap
+            local handle = tool:FindFirstChild("Handle")
+            if handle then
+                local shoot = handle:FindFirstChild("ShootSound")
+                if shoot then
+                    local sounds = RS:FindFirstChild("SkinAssets")
+                        and RS.SkinAssets:FindFirstChild("GunShootSounds")
+                        and RS.SkinAssets.GunShootSounds:FindFirstChild(tool.Name)
+                    local obj = sounds and sounds:FindFirstChild(skinName)
+                    if obj then shoot.SoundId = obj.Value end
+                end
+                -- Particle
+                local pf = RS:FindFirstChild("SkinAssets") and RS.SkinAssets:FindFirstChild("GunHandleParticle")
+                local ps = pf and pf:FindFirstChild(skinName)
+                local pe = ps and ps:FindFirstChild("ParticleEmitter")
+                if pe then
+                    for _, ex in ipairs(handle:GetChildren()) do
+                        if ex:IsA("ParticleEmitter") then ex:Destroy() end
+                    end
+                    pe:Clone().Parent = handle
+                end
+                handle:SetAttribute("SkinName", skinName)
+            end
+        end
+
+        -- Wire up a tool when equipped
+        local function setupTool(tool)
+            if not tool:IsA("Tool") then return end
+            if toolRegistry[tool] then return end
+            toolRegistry[tool] = true
+
+            tool.Equipped:Connect(function()
+                local char = tool.Parent
+                if char ~= LocalPlayer.Character then return end
+                local skin = SC_C['Weapons'][tool.Name]
+                if not skin or skin == "" then return end
+                if tool.Name == "[Knife]" then
+                    applyKnife(char, tool, skin)
+                else
+                    applyGun(tool, skin)
+                end
+            end)
+
+            tool.Unequipped:Connect(function()
+                if tool.Name == "[Knife]" then cleanKnife(tool) end
+            end)
+
+            -- Apply immediately if already equipped
+            if tool.Parent == LocalPlayer.Character then
+                local skin = SC_C['Weapons'][tool.Name]
+                if skin and skin ~= "" then
+                    if tool.Name == "[Knife]" then
+                        task.spawn(applyKnife, LocalPlayer.Character, tool, skin)
+                    else
+                        task.spawn(applyGun, tool, skin)
+                    end
+                end
+            end
+        end
+
+        local function watchChar(char)
+            if not char then return end
+            for _, v in ipairs(char:GetChildren()) do
+                if v:IsA("Tool") then setupTool(v) end
+            end
+            char.ChildAdded:Connect(function(v)
+                if v:IsA("Tool") then setupTool(v) end
+            end)
+        end
+
+        if LocalPlayer.Character then watchChar(LocalPlayer.Character) end
+        LocalPlayer.CharacterAdded:Connect(watchChar)
+
+        for _, v in ipairs(LocalPlayer.Backpack:GetChildren()) do
+            if v:IsA("Tool") then setupTool(v) end
+        end
+        LocalPlayer.Backpack.ChildAdded:Connect(function(v)
+            if v:IsA("Tool") then setupTool(v) end
+        end)
+    end
+end
+
+
+
+-- HUD
+do
+    local hudGui = Instance.new("ScreenGui")
+    hudGui.Name = "PrimildalHUD"
+    hudGui.ResetOnSpawn = false
+    hudGui.IgnoreGuiInset = true
+    pcall(function() hudGui.Parent = game:GetService("CoreGui") end)
+    if not hudGui.Parent then hudGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
+
+    local hotkeyLabel = Instance.new("TextLabel")
+    hotkeyLabel.BackgroundTransparency = 1
+    hotkeyLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+    hotkeyLabel.Position = UDim2.new(0.5, 0, 0, 900)
+    hotkeyLabel.AutomaticSize = Enum.AutomaticSize.XY
+    hotkeyLabel.RichText = true
+    hotkeyLabel.Font = Enum.Font.SourceSansBold
+    hotkeyLabel.TextStrokeTransparency = 0
+    hotkeyLabel.TextXAlignment = Enum.TextXAlignment.Center
+    hotkeyLabel.TextYAlignment = Enum.TextYAlignment.Center
+    hotkeyLabel.Visible = true
+    hotkeyLabel.Parent = hudGui
+
+    -- Pull colors and title from config
+    local HUD_C = Axiom['General']['HUD']
+
+    local function rgb(c)
+        return string.format("rgb(%d, %d, %d)", math.floor(c.R*255), math.floor(c.G*255), math.floor(c.B*255))
+    end
+
+    local separator = '\n'
+
+    RunService.Heartbeat:Connect(function()
+        local SA    = Axiom['Silent Aim']
+        local WM    = Axiom['Weapon Modifiers']
+        local ESP_C = Axiom['ESP']
+        local PM    = Axiom['Player Modifications']
+
+        local activeFeatures = {}
+
+        -- Read colors live so changes take effect without restart
+        local titleColor   = HUD_C['Title Color']   or Color3.fromRGB(143, 174, 211)
+        local featureColor = HUD_C['Feature Color'] or Color3.fromRGB(255, 255, 255)
+        local activeColor  = HUD_C['Active Color']  or Color3.fromRGB(255, 255, 255)
+
+        local tColorStr = rgb(titleColor)
+        local fColorStr = rgb(featureColor)
+        local tgtStr    = rgb(activeColor)
+
+        -- Build title: "CustomText / Primidal" or just "Primidal"
+        local customTitle = HUD_C['Title'] or ""
+        local titleText
+        if customTitle ~= "" then
+            titleText = customTitle .. " / Primidal"
+        else
+            titleText = "Primidal"
+        end
+
+        local function row(feat, val)
+            return string.format('<font color="%s">%s</font> <font color="%s">-</font> <font color="%s">%s</font>', fColorStr, feat, tColorStr, tgtStr, val)
+        end
+
+        if SA['Enabled'] and Target then
+            table.insert(activeFeatures, row("Silent Aim", Target.Name))
+        end
+        if Axiom['Cam Lock']['Enabled'] then
+            if camLockEnabled and camLockTarget then
+                table.insert(activeFeatures, row("Cam Lock", camLockTarget.Name))
+            else
+                table.insert(activeFeatures, row("Cam Lock", "scanning"))
+            end
+        end
+        if WM['Rapid Fire']['Enabled'] then
+            table.insert(activeFeatures, row("Rapid Fire", "on"))
+        end
+        if WM['Range']['Enabled'] then
+            table.insert(activeFeatures, row("Inf Range", "on"))
+        end
+        if ESP_C['Enabled'] then
+            table.insert(activeFeatures, row("ESP", "on"))
+        end
+        if PM['Walk Speed']['Enabled'] and speedEnabled then
+            table.insert(activeFeatures, row("Speed", tostring(PM['Walk Speed']['Value'])))
+        end
+        if PM['Jump Power']['Enabled'] then
+            table.insert(activeFeatures, row("Jump Power", tostring(PM['Jump Power']['Power'])))
+        end
+
+        if #activeFeatures > 0 then
+            local featuresText = table.concat(activeFeatures, separator)
+            hotkeyLabel.Text = '<font size="22" color="' .. tColorStr .. '">' .. titleText .. '</font>\n<font size="13">' .. featuresText .. '</font>'
+        else
+            hotkeyLabel.Text = '<font size="22" color="' .. tColorStr .. '">' .. titleText .. '</font>'
+        end
+    end)
+end
