@@ -1,3 +1,204 @@
+shared.Axiom = {
+    ['General'] = {
+        ['Binds'] = {
+            ['Silent Aim'] = 'C',
+            ['Cam Lock']   = 'Q',
+            ['Rapid Fire'] = 'L',
+            ['Jump Power'] = 'J',
+            ['Walk Speed'] = 'V',
+        },
+        ['Checks'] = {
+            ['Visible'] = false,
+        },
+        ['HUD'] = {
+            ['Title'] = "ruin xd",                                        -- Your text before /Primidal. Leave "" for just "Primidal"
+            ['Title Color']   = Color3.fromRGB(143, 174, 211),    -- Color of the title text
+            ['Feature Color'] = Color3.fromRGB(255, 255, 255),    -- Color of feature names
+            ['Active Color']  = Color3.fromRGB(255, 255, 255),    -- Color of active values (target names, numbers)
+        },
+    },
+    ['Silent Aim'] = {
+        ['Enabled'] = true,
+        ['Mode'] = 'Target',
+        ['Distance'] = math.huge,
+        ['Hit Part'] = 'Closest Part', -- Options: 'Head', 'UpperTorso', 'HumanoidRootPart', 'Closest Part'
+        ['Prediction'] = 0,
+        ['FOV'] = {
+            ['Enabled'] = false,
+            ['Visible'] = false,
+            ['Radius'] = 200,
+        },
+    },
+    ['Cam Lock'] = {
+        ['Enabled'] = true,
+        ['Mode'] = 'Target',       -- 'Target' = press key to lock on, 'Automatic' = always tracks closest
+        ['Hit Part'] = 'Head',     -- 'Head', 'UpperTorso', 'LowerTorso', 'HumanoidRootPart',
+                                   -- 'LeftUpperArm', 'RightUpperArm', 'LeftLowerArm', 'RightLowerArm',
+                                   -- 'LeftHand', 'RightHand', 'LeftUpperLeg', 'RightUpperLeg',
+                                   -- 'LeftLowerLeg', 'RightLowerLeg', 'LeftFoot', 'RightFoot',
+                                   -- 'Closest Part'
+        ['Smoothness'] = 0.90,     -- 0.0 = instant snap, 0.05 = very fast, 0.15 = smooth, 0.3 = slow
+        ['Prediction'] = {
+            ['X'] = 0.165,
+            ['Y'] = 0.165,
+            ['Z'] = 0.165,
+        },
+        ['FOV'] = {
+            ['Enabled'] = true,
+            ['Visible'] = false,
+            ['Radius'] = 600,
+            ['Color'] = Color3.fromRGB(255, 255, 100),
+        },
+    },
+    ['Weapon Modifiers'] = {
+        ['Spread'] = {
+            ['Enabled'] = true,
+            ['Amount'] = 0, -- 0 = No Spread, 1 = Default
+            ['Weapons'] = {
+                ['[Double-Barrel SG]'] = 0,
+                ['[Revolver]'] = 0,
+                ['[TacticalShotgun]'] = 0,
+                ['[Shotgun]'] = 0.2,
+                ['[SMG]'] = 0,
+                ['[Silencer]'] = 0,
+                ['[Glock]'] = 0,
+                ['[AK47]'] = 0,
+                ['[LMG]'] = 0,
+                ['[DrumGun]'] = 0,
+                ['[Pistol]'] = 0,
+            }
+        },
+        ['Delay Changer'] = {
+            ['Enabled'] = true,
+            ['Amount'] = 0,  -- global fallback delay in seconds (0 = instant)
+            ['Weapons'] = {
+                ['[Double-Barrel SG]'] = 0.02,
+                ['[Revolver]']         = 0,
+                ['[TacticalShotgun]']  = 0,
+                ['[Shotgun]']          = 0,
+                ['[SMG]']              = 0,
+                ['[Silencer]']         = 0,
+                ['[Glock]']            = 0,
+                ['[AK47]']             = 0,
+                ['[LMG]']              = 0,
+                ['[DrumGun]']          = 0,
+                ['[Pistol]']           = 0,
+            }
+        },
+        ['Range'] = {
+            ['Enabled'] = false,
+            ['Amount'] = 9e9, -- Set Range/Distance to this
+            ['Weapons'] = {
+                ['[Double-Barrel SG]'] = 9e9,
+                ['[Revolver]'] = 9e9,
+                ['[TacticalShotgun]'] = 9e9,
+                ['[Shotgun]'] = 9e9,
+                ['[SMG]'] = 9e9,
+                ['[Silencer]'] = 9e9,
+                ['[Glock]'] = 9e9,
+                ['[AK47]'] = 9e9,
+                ['[LMG]'] = 9e9,
+                ['[DrumGun]'] = 9e9,
+                ['[Pistol]'] = 9e9,
+            }
+        },
+        ['Rapid Fire'] = {
+            ['Enabled'] = true, -- Toggle with bind
+            ['Amount'] = 0.09, -- Cooldown between activations (0 = instant)
+            ['Weapons'] = {
+                ['[Double-Barrel SG]'] = 0,
+                ['[Revolver]'] = 0,
+                ['[TacticalShotgun]'] = 0,
+                ['[Shotgun]'] = 0,
+                ['[SMG]'] = 0,
+                ['[Silencer]'] = 0,
+                ['[Glock]'] = 0,
+                ['[AK47]'] = 0,
+                ['[LMG]'] = 0,
+                ['[DrumGun]'] = 0,
+                ['[Pistol]'] = 0,
+            }
+        }
+    },
+    ['ESP'] = {
+        ['Enabled'] = true,
+        ['Name'] = true,
+        ['Color'] = Color3.fromRGB(136, 8, 8),
+        ['Target Color'] = Color3.fromRGB(137, 243, 54),
+        ['Knocked Color'] = Color3.fromRGB(0, 0, 205),
+        ['Size'] = 10,
+        ['Font'] = Enum.Font.GothamBold,
+        ['Tracer'] = {
+            ['Enabled'] = false,
+            ['Color'] = Color3.fromRGB(255, 60, 60),
+            ['Transparency'] = 1,
+            ['Thickness'] = 1,
+        }
+    },
+    ['Player Modifications'] = {
+        ['No Jump Cooldown'] = {
+            ['Enabled'] = true,
+        },
+        ['Jump Power'] = {
+            ['Enabled'] = false,
+            ['Power'] = 100,
+        },
+        ['Walk Speed'] = {
+            ['Enabled'] = true, -- Toggle with bind
+            ['Value'] = 700,      -- WalkSpeed to apply when enabled
+        },
+    },
+    ['Hitbox Expander'] = {
+        ['Enabled'] = true,
+        ['Size'] = 5,          -- HumanoidRootPart size in studs (default is ~2x2x1)
+        ['Visualize'] = false, -- true = show blue neon box, false = invisible
+    },
+    ['Color Correction'] = {
+        ['Enabled'] = true,
+        ['Saturation'] = {
+            ['Enabled'] = true,
+            ['Value'] = 2,
+        },
+        ['Contrast'] = {
+            ['Enabled'] = false,
+            ['Value'] = 0.2,
+        },
+        ['Brightness'] = {
+            ['Enabled'] = false,
+            ['Value'] = 0.1,
+        },
+        ['TintColor'] = {
+            ['Enabled'] = false,
+            ['Value'] = Color3.fromRGB(255, 255, 255),
+        },
+    },
+    ['Skin Changer'] = {
+        ['Enabled'] = false,
+        ['Weapons'] = {
+            ['[Knife]']           = "",  -- e.g. "Dragon", "Void", "Purple Dagger"
+            ['[Revolver]']        = "",  -- e.g. "Gold"
+            ['[Glock]']           = "",
+            ['[Silencer]']        = "",
+            ['[AK47]']            = "",
+            ['[SMG]']             = "",
+            ['[LMG]']             = "",
+            ['[Shotgun]']         = "",
+            ['[TacticalShotgun]'] = "",
+            ['[Double-Barrel SG]']= "",
+            ['[DrumGun]']         = "",
+            ['[Pistol]']          = "",
+        },
+    },
+    ['Wallbang'] = {
+        ['Enabled'] = false, -- moves Vehicles/MAP into workspace.Ignored so bullets pass through
+    },
+    ['Infinite Range'] = {
+        ['Enabled']    = true, -- only works on PlaceId 139070315431836
+        ['Range']      = 999999,  -- GunHandler range override
+        ['Bypass Pos'] = 19,    -- faked hit distance sent to server (studs)
+    },
+}
+
 local Axiom = shared.Axiom
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -6,6 +207,54 @@ local Lighting = game:GetService("Lighting")
 local LocalPlayer = Players.LocalPlayer
 local Mouse = LocalPlayer:GetMouse()
 local Camera = workspace.CurrentCamera
+
+-- ============================================================
+--  RE-EXECUTE GUARD
+--  Lives here in the logic section, below the config table.
+--  On re-execute: kills old loops, cleans up all GUIs/drawings/
+--  hooks, waits 3 seconds, then continues fresh.
+-- ============================================================
+
+-- Signal any previous instance to stop
+if shared._AxiomRunning then
+    shared._AxiomRunning = false
+    task.wait(3)
+end
+shared._AxiomRunning = true
+
+-- Run cleanup functions registered by the previous execution
+if shared._AxiomCleanup then
+    for _, fn in ipairs(shared._AxiomCleanup) do
+        pcall(fn)
+    end
+end
+shared._AxiomCleanup = {}
+
+-- Register a function to run when this instance is cleaned up on next re-execute
+local function onCleanup(fn)
+    table.insert(shared._AxiomCleanup, fn)
+end
+
+-- Returns false the moment a new execution signals this one to stop
+local function isAlive()
+    return shared._AxiomRunning == true
+end
+
+-- Tracked connections — all disconnected automatically on re-execute
+local _connections = {}
+local function safeConnect(signal, fn)
+    local conn = signal:Connect(fn)
+    table.insert(_connections, conn)
+    return conn
+end
+onCleanup(function()
+    for _, c in ipairs(_connections) do
+        pcall(function() c:Disconnect() end)
+    end
+    _connections = {}
+end)
+
+-- ============================================================
 
 local Target = nil
 local TargetPart = nil
@@ -22,6 +271,7 @@ CLFovCircle.Thickness = 1
 CLFovCircle.NumSides  = 64
 CLFovCircle.Filled    = false
 CLFovCircle.Visible   = false
+onCleanup(function() pcall(function() CLFovCircle:Remove() end) end)
 
 local FOVCircle = Drawing.new("Circle")
 FOVCircle.Thickness = 1
@@ -29,6 +279,7 @@ FOVCircle.NumSides = 64
 FOVCircle.Filled = false
 FOVCircle.Transparency = 0.6
 FOVCircle.Color = Color3.fromRGB(255, 255, 255)
+onCleanup(function() pcall(function() FOVCircle:Remove() end) end)
 
 
 local function IsVisible(Part, Character)
@@ -167,6 +418,7 @@ espGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 espGui.IgnoreGuiInset = true
 pcall(function() espGui.Parent = game:GetService("CoreGui") end)
 if not espGui.Parent then espGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
+onCleanup(function() pcall(function() espGui:Destroy() end) end)
 
 local espLabels = {}
 
@@ -202,14 +454,15 @@ local function removeESP(player)
 end
 
 for _, p in ipairs(Players:GetPlayers()) do if p ~= LocalPlayer then addESP(p) end end
-Players.PlayerAdded:Connect(addESP)
-Players.PlayerRemoving:Connect(removeESP)
+safeConnect(Players.PlayerAdded, addESP)
+safeConnect(Players.PlayerRemoving, removeESP)
 
 local TracerLine = Drawing.new("Line")
 TracerLine.Visible = false
 TracerLine.Thickness = 1
 TracerLine.Transparency = 1
 TracerLine.ZIndex = 10
+onCleanup(function() pcall(function() TracerLine:Remove() end) end)
 
 local TracerOutline = Drawing.new("Line")
 TracerOutline.Visible = false
@@ -217,8 +470,9 @@ TracerOutline.Thickness = 3
 TracerOutline.Transparency = 0.5
 TracerOutline.Color = Color3.fromRGB(0, 0, 0)
 TracerOutline.ZIndex = 9
+onCleanup(function() pcall(function() TracerOutline:Remove() end) end)
 
-UserInputService.InputBegan:Connect(function(Input, Processed)
+safeConnect(UserInputService.InputBegan, function(Input, Processed)
     if not Processed then
         local Binds = Axiom['General']['Binds']
         if Input.KeyCode == Enum.KeyCode[Binds['Silent Aim']] then
@@ -273,14 +527,14 @@ UserInputService.InputBegan:Connect(function(Input, Processed)
     end
 end)
 
-UserInputService.InputEnded:Connect(function(Input)
+safeConnect(UserInputService.InputEnded, function(Input)
     if Input.UserInputType == Enum.UserInputType.MouseButton1 then
         isMouseDown = false
     end
 end)
 
 local RawMeta = getrawmetatable(game)
-local oldIndex = RawMeta.__index
+local oldIndex    = RawMeta.__index
 local oldNewIndex = RawMeta.__newindex
 local oldNamecall = RawMeta.__namecall
 setreadonly(RawMeta, false)
@@ -302,7 +556,7 @@ RawMeta.__newindex = newcclosure(function(self, key, value)
             if PlayerMods['Jump Power']['Enabled'] then
                 return oldNewIndex(self, key, PlayerMods['Jump Power']['Power'] or 100)
             elseif PlayerMods['No Jump Cooldown']['Enabled'] then
-                return oldNewIndex(self, key, 50) -- Standard jump power
+                return oldNewIndex(self, key, 50)
             end
         end
     end
@@ -326,6 +580,17 @@ RawMeta.__namecall = newcclosure(function(self, ...)
 end)
 
 setreadonly(RawMeta, true)
+
+-- Restore original metamethods on re-execute so we don't double-hook
+onCleanup(function()
+    pcall(function()
+        setreadonly(RawMeta, false)
+        RawMeta.__index    = oldIndex
+        RawMeta.__newindex = oldNewIndex
+        RawMeta.__namecall = oldNamecall
+        setreadonly(RawMeta, true)
+    end)
+end)
 
 -- No Spread (Multi-Method)
 if hookfunction then
@@ -355,6 +620,10 @@ if hookfunction then
         end
         return oldRandom(...)
     end))
+    -- Restore on re-execute so we don't stack hooks
+    onCleanup(function()
+        pcall(function() hookfunction(math.random, oldRandom) end)
+    end)
 else
     pcall(function()
         local m = math
@@ -385,12 +654,19 @@ else
             end
             return oldRandom(...)
         end)
+        onCleanup(function()
+            pcall(function()
+                setreadonly(m, false)
+                m.random = oldRandom
+                setreadonly(m, true)
+            end)
+        end)
     end)
 end
 
 -- Rapid Fire Loop
 task.spawn(function()
-    while true do
+    while isAlive() do
         local RF = Axiom['Weapon Modifiers']['Rapid Fire']
         if RF['Enabled'] and isMouseDown then
             local Tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
@@ -411,7 +687,7 @@ task.spawn(function()
     end
 end)
 
-RunService.RenderStepped:Connect(function()
+safeConnect(RunService.RenderStepped, function()
     local Config = Axiom['Silent Aim']
     local ESP_C = Axiom['ESP']
     local WM = Axiom['Weapon Modifiers']
@@ -736,7 +1012,8 @@ do
         pcall(patchValueBases,  tool, delayValue)
     end
 
-    RunService.Heartbeat:Connect(function()
+    safeConnect(RunService.Heartbeat, function()
+        if not isAlive() then return end
         if not DC['Enabled'] then return end
         local char = LocalPlayer.Character
         if not char then return end
@@ -821,7 +1098,7 @@ end
 -- ============================================================
 do
     local IR = Axiom['Infinite Range']
-    local TARGET_PLACE = 75947843575468
+    local TARGET_PLACE = 139070315431836
 
     if IR['Enabled'] and game.PlaceId == TARGET_PLACE then
 
@@ -848,7 +1125,8 @@ do
                 local distanceTraveled = 0
                 local TP_DISTANCE      = 30
 
-                RunService.Heartbeat:Connect(function()
+                safeConnect(RunService.Heartbeat, function()
+                    if not isAlive() then return end
                     if not bullet or not bullet.Parent then return end
                     if not IR['Enabled'] then return end
 
@@ -867,7 +1145,8 @@ do
         end
 
         -- Layer 2: Heartbeat scanner for new bullet instances
-        RunService.Heartbeat:Connect(function()
+        safeConnect(RunService.Heartbeat, function()
+            if not isAlive() then return end
             if not IR['Enabled'] then return end
 
             for _, part in pairs(workspace:GetChildren()) do
@@ -971,23 +1250,23 @@ do
             local args = {...}
             if not checkcaller or not checkcaller() then
                 if WM['Spread']['Enabled'] then
-                    -- Detection patterns for spread-related math.random calls
                     if (#args == 0)
                         or (args[1] == -0.05 and args[2] == 0.05)
                         or (args[1] == -0.1)
                         or (args[1] == -0.05) then
-                        
                         local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
                         local mult = WM['Spread']['Amount'] or 0
                         if tool and WM['Spread']['Weapons'][tool.Name] ~= nil then
                             mult = WM['Spread']['Weapons'][tool.Name]
                         end
-                        
                         return oldRandom(...) * mult
                     end
                 end
             end
             return oldRandom(...)
+        end)
+        onCleanup(function()
+            pcall(function() hookfunction(math.random, oldRandom) end)
         end)
     end
 end
@@ -995,9 +1274,15 @@ end
 -- Color Correction
 do
     local CC_C = Axiom['Color Correction']
-    local cc = Lighting:FindFirstChild("PrimildalColorCorrection") or Instance.new("ColorCorrectionEffect")
+    -- Remove any leftover from a previous run first
+    pcall(function()
+        local old = Lighting:FindFirstChild("PrimildalColorCorrection")
+        if old then old:Destroy() end
+    end)
+    local cc = Instance.new("ColorCorrectionEffect")
     cc.Name = "PrimildalColorCorrection"
     cc.Parent = Lighting
+    onCleanup(function() pcall(function() cc:Destroy() end) end)
 
     local function applyCC()
         if not CC_C['Enabled'] then
@@ -1312,12 +1597,22 @@ end
 
 -- HUD
 do
+    -- Remove any existing HUD from a previous run
+    pcall(function()
+        local cg = game:GetService("CoreGui")
+        local old = cg:FindFirstChild("PrimildalHUD")
+        if old then old:Destroy() end
+        local old2 = LocalPlayer:FindFirstChild("PlayerGui") and LocalPlayer.PlayerGui:FindFirstChild("PrimildalHUD")
+        if old2 then old2:Destroy() end
+    end)
+
     local hudGui = Instance.new("ScreenGui")
     hudGui.Name = "PrimildalHUD"
     hudGui.ResetOnSpawn = false
     hudGui.IgnoreGuiInset = true
     pcall(function() hudGui.Parent = game:GetService("CoreGui") end)
     if not hudGui.Parent then hudGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
+    onCleanup(function() pcall(function() hudGui:Destroy() end) end)
 
     local hotkeyLabel = Instance.new("TextLabel")
     hotkeyLabel.BackgroundTransparency = 1
@@ -1341,7 +1636,8 @@ do
 
     local separator = '\n'
 
-    RunService.Heartbeat:Connect(function()
+    safeConnect(RunService.Heartbeat, function()
+        if not isAlive() then return end
         local SA    = Axiom['Silent Aim']
         local WM    = Axiom['Weapon Modifiers']
         local ESP_C = Axiom['ESP']
@@ -1405,3 +1701,7 @@ do
         end
     end)
 end
+
+-- ============================================================
+--  END OF SCRIPT
+-- ============================================================
