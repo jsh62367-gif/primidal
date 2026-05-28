@@ -821,7 +821,7 @@ end
 -- ============================================================
 do
     local IR = Axiom['Infinite Range']
-    local TARGET_PLACE = 139070315431836
+    local TARGET_PLACE = 75947843575468
 
     if IR['Enabled'] and game.PlaceId == TARGET_PLACE then
 
