@@ -1730,5 +1730,3 @@ do
     end)
     onCleanup(function() pcall(function() tbConn:Disconnect() end) end)
 end
-
-print("[Primidal Private] loaded")
